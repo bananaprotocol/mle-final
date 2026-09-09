@@ -3,9 +3,23 @@ name = "mle-final"
 version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
-    "numpy>=2.5.3",
+    "numpy>=2.5.2",
     "pygame>=2.6.1",
     "scikit-learn>=1.9.0",
     "scipy>=1.18.1",
     "tqdm>=4.70.0",
 ]
+
+[dependency-groups]
+rocm-gfx1030 = [
+    "torch[device-gfx1030]>=2.14.0",
+    "torchvision[device-gfx1030]>=0.28.0",
+]
+
+[tool.uv.sources]
+torch = { index = "therock" }
+torchvision = { index = "therock" }
+
+[[tool.uv.index]]
+name = "therock"
+url = "https://nightly.repo.amd.com/rocm/whl-next/"
