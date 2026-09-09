@@ -25,7 +25,7 @@
 
           shellHook = ''
             unset PYTHONPATH
-            uv sync
+            uv sync --group rocm-gfx1030
             . .venv/bin/activate
           '';
         };
