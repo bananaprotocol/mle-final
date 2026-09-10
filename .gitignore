@@ -1,0 +1,8 @@
+.direnv/
+.envrc
+__pycache__/
+*.pyc
+bomberman_rl/logs/
+bomberman_rl/replays/
+bomberman_rl/screenshots/
+bomberman_rl/agent_code/*/logs/
