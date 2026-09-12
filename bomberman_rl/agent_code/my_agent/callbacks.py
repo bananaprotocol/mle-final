@@ -51,13 +51,13 @@ def act(self, game_state: dict) -> str:
     # Exploitation: choose action with highest q value
     state = state_to_features(game_state)
     q_values = {a: self.model.get((state, a), 0.0) for a in ACTIONS}
-    return max(q_values, key=q_values.get)
+    # return max(q_values, key=q_values.get)
 
     # Alternatively: Return a random action if multiple actions share the same q-value
 
-    # max_q = max(q_values.values())
-    # best_actions = [a for a, q in q_values.items() if q == max_q]
-    # return random.choice(best_actions)
+    max_q = max(q_values.values())
+    best_actions = [a for a, q in q_values.items() if q == max_q]
+    return random.choice(best_actions)
 
 
 def state_to_features(game_state: dict) -> np.array:

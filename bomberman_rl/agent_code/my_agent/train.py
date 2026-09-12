@@ -18,6 +18,7 @@ RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability ...
 # Events
 MOVED_TOWARDS_COIN = "MOVED_TOWARDS_COIN"
 MOVED_AWAY_FROM_COIN = "MOVED_AWAY_FROM_COIN"
+PATH_BLOCKED = "PATH_BLOCKED"
 
 ALPHA = 0.1
 GAMMA = 0.9
@@ -64,6 +65,10 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         events.append(MOVED_TOWARDS_COIN)
     elif new_coin_distance > old_coin_distance:
         events.append(MOVED_AWAY_FROM_COIN)
+
+    # CE3: Obstacle between agent and coin?
+    if is_path_blocked(old_game_state):
+        events.append('PATH_BLOCKED')
 
     state = state_to_features(old_game_state)
     next_state = state_to_features(new_game_state)
@@ -114,7 +119,8 @@ def reward_from_events(self, events: List[str]) -> int:
         
         # Coin heaven
         MOVED_TOWARDS_COIN: .1,
-        MOVED_AWAY_FROM_COIN: -.2,
+        MOVED_AWAY_FROM_COIN: -.3,
+        PATH_BLOCKED: -.1,
         e.WAITED: -.5,
         e.BOMB_DROPPED: -.5,
     }
@@ -156,3 +162,27 @@ def distance_to_coin(game_state):
         abs(cx - x) + abs(cy - y)
         for cx, cy in coins
     )
+
+
+def is_path_blocked(game_state):
+    x, y = game_state["self"][3]
+    field = game_state["field"]
+    coins = game_state["coins"]
+    
+    if not coins:
+        return False
+    
+    cx, cy = min(coins, key=lambda c: abs(c[0]-x)+abs(c[1]-y))
+    
+    if cx == x and cy != y:
+        step = 1 if cy > y else -1
+        for ny in range(y + step, cy, step):
+            if field[x, ny] == -1:
+                return True
+    if cy == y and cx != x:
+        step = 1 if cx > x else -1
+        for nx in range(x + step, cx, step):
+            if field[nx, y] == -1:
+                return True
+    
+    return False
