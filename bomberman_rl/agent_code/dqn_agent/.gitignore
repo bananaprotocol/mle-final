@@ -1,0 +1,3 @@
+# Training output. The submission zip must not contain these files.
+ckpt_*.pt
+logs/
