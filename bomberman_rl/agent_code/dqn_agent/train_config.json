@@ -1,0 +1,9 @@
+{
+  "stage": "stage1-coin-heaven",
+  "n_rounds": 300,
+  "eps_start": 1.0,
+  "eps_end": 0.05,
+  "warm_start": null,
+  "aux_scale": 1.0,
+  "seed": 1
+}
