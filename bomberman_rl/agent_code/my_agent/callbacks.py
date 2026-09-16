@@ -88,56 +88,84 @@ def state_to_features(game_state: dict) -> np.array:
     x, y = game_state["self"][3]
     field = game_state["field"]
 
-    # F1: Direction of 1. nearest coin, if there are no coins 2. nearest crate (9 possible states)
+    # F1: Direction of 1. nearest coin, if there are no coins 2. nearest crate (BFS)
     navigation_target = get_navigation_target(game_state)
 
-    # F2: Wall or crate in each direction of agent? (jeweils True oder False)
-    wall_up = field[x, y - 1] != 0
-    wall_right = field[x + 1, y] != 0
-    wall_down = field[x, y + 1] != 0
-    wall_left = field[x - 1, y] != 0
+    # F2: Are adjacent tiles free? (crate, wall, bomb or other agent on tile?)
+    tile_up = is_tile_free(game_state, x, y - 1)
+    tile_right = is_tile_free(game_state, x + 1, y)
+    tile_down = is_tile_free(game_state, x, y + 1)
+    tile_left = is_tile_free(game_state, x - 1, y)
 
     # F3: Can the agent drop a bomb? (Or is it on cooldown)
     can_bomb = game_state["self"][2]
 
-    # F4: Is the Agent currently in danger/on an explosion tile?
-    in_danger = (x, y) in get_explosion_tiles(game_state)
-
-    # F5: Is there an escape route, if the agent would drop a bomb now?
+    # F4: Is there an escape route, if the agent would drop a bomb now?
     has_escape = has_escape_route(game_state)
 
-    # F6: If the agent is currently in danger, direction of escape
+    # F5: If the agent is currently in danger, direction of escape
+    in_danger = (x, y) in get_explosion_tiles(game_state)
+
     if in_danger:
         escape_direction = get_escape_direction(game_state)
     else:
         escape_direction = "NONE"
 
-    # F7: Place bomb here if it can hit at least 1 crate
-    should_bomb_here = count_crates_in_blast(game_state) > 0
+    # F6: How many crates are currently in range (up to 3)
+    crates_in_blast = min(count_crates_in_blast(game_state), 3)
 
     return (
             navigation_target, 
-            wall_up, wall_right, wall_down, wall_left,
+            tile_up, tile_right, tile_down, tile_left,
             can_bomb,
-            in_danger,
             has_escape,
             escape_direction,
-            should_bomb_here
+            crates_in_blast
     )
+
+
+def is_tile_free(game_state, x, y):
+    field = game_state["field"]
+
+    if field[x, y] != 0:
+        return False
+
+    bomb_positions = {bomb[0] for bomb in game_state["bombs"]}
+    agent_positions = {agent[3] for agent in game_state["others"]}
+
+    return (x, y) not in bomb_positions and (x, y) not in agent_positions
 
 
 def get_navigation_target(game_state):
     x, y = game_state["self"][3]
-    if game_state["coins"]:
-        target = min(game_state["coins"], key=lambda c: abs(c[0]-x)+abs(c[1]-y))
-    else:
-        crates = list(zip(*np.where(game_state["field"] == 1)))
-        if crates:
-            target = min(crates, key=lambda c: abs(c[0]-x)+abs(c[1]-y))
-        else:
-            return "NONE"
-    dx, dy = target[0]-x, target[1]-y
-    return (np.sign(dx), np.sign(dy))
+    field = game_state["field"]
+
+    targets = game_state["coins"] or list(zip(*np.where(field == 1)))
+    targets = set(map(tuple, targets))
+
+    if not targets:
+        return "NONE"
+
+    queue = deque([(x, y, None)])
+    visited = {(x, y)}
+
+    while queue:
+        cx, cy, first_direction = queue.popleft()
+
+        for dx, dy, direction in [
+            (0, -1, "UP"), (1, 0, "RIGHT"), (0, 1, "DOWN"), (-1, 0, "LEFT")
+        ]:
+            nx, ny = cx + dx, cy + dy
+            new_direction = direction if first_direction is None else first_direction
+
+            if (nx, ny) in targets:
+                return new_direction
+
+            if field[nx, ny] == 0 and (nx, ny) not in visited:
+                visited.add((nx, ny))
+                queue.append((nx, ny, new_direction))
+
+    return "NONE"
 
 
 def has_escape_route(game_state):
@@ -186,6 +214,13 @@ def get_explosion_tiles(game_state):
     field = game_state["field"]
     explosion = set()
 
+    # active explosions
+    explosion_map = game_state["explosion_map"]
+    xs, ys = np.where(explosion_map > 0)
+    for ex, ey in zip(xs, ys):
+        explosion.add((int(ex), int(ey)))
+
+    # future explosions
     bombs = game_state["bombs"]
 
     for (x, y), timer in bombs:
