@@ -6,3 +6,7 @@ bomberman_rl/logs/
 bomberman_rl/replays/
 bomberman_rl/screenshots/
 bomberman_rl/agent_code/*/logs/
+results/
+bomberman_rl/agent_code/*/replay.npz
+bomberman_rl/agent_code/*/replay.npz.tmp
+bomberman_rl/agent_code/dqn_agent_frozen/
