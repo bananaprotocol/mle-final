@@ -13,7 +13,7 @@
 #   DQN_CYCLES=4 scripts/train_curriculum.sh 3    # shorter stage 3
 #   scripts/train_curriculum.sh reset     # delete all training artefacts
 #
-#   DQN_AGENT_DIR=dqn_agent_v3 DQN_DEVICE=cuda scripts/train_curriculum.sh 4
+#   DQN_AGENT_DIR=ekubo DQN_DEVICE=cuda scripts/train_curriculum.sh 4
 #                                         # warm-start fine-tune of the copy
 #
 # | stage | scenario(s)                                  | rounds            |
