@@ -52,7 +52,6 @@ def act(self, game_state: dict) -> str:
     # Exploitation: choose action with highest q value
     state = state_to_features(game_state)
     q_values = {a: self.model.get((state, a), 0.0) for a in ACTIONS}
-    # return max(q_values, key=q_values.get)
 
     if not self.train:
         self.logger.info(
@@ -60,7 +59,7 @@ def act(self, game_state: dict) -> str:
             + str({a: self.model.get((state, a), 0.0) for a in ACTIONS})
         )
 
-    # Alternatively: Return a random action if multiple actions share the same q-value
+    # Return a random action if multiple actions share the same q-value
     max_q = max(q_values.values())
     best_actions = [a for a, q in q_values.items() if q == max_q]
     return random.choice(best_actions)
@@ -84,9 +83,8 @@ def state_to_features(game_state: dict) -> np.array:
     if game_state is None:
         return None
 
-     # Load agent position, field
+     # Load agent position
     x, y = game_state["self"][3]
-    field = game_state["field"]
 
     # F1: Direction of 1. nearest coin, if there are no coins 2. nearest crate (BFS)
     navigation_target = get_navigation_target(game_state)
@@ -103,15 +101,22 @@ def state_to_features(game_state: dict) -> np.array:
     # F4: Is there an escape route, if the agent would drop a bomb now?
     has_escape = has_escape_route(game_state)
 
-    # F5: If the agent is currently in danger, direction of escape
+    # F5: Is the agent currently in danger? (in range of a ticking bomb)
     in_danger = (x, y) in get_explosion_tiles(game_state)
 
+    # F6: If the agent is currently in danger, direction of escape
     if in_danger:
         escape_direction = get_escape_direction(game_state)
     else:
-        escape_direction = "NONE"
+        escape_direction = None
 
-    # F6: How many crates are currently in range (up to 3)
+    # F6: Danger directions
+    if not in_danger:
+        danger_direction = get_danger_direction(game_state)
+    else:
+        danger_direction = None
+    
+    # F7: How many crates are currently in range (up to 3)
     crates_in_blast = min(count_crates_in_blast(game_state), 3)
 
     return (
@@ -119,7 +124,9 @@ def state_to_features(game_state: dict) -> np.array:
             tile_up, tile_right, tile_down, tile_left,
             can_bomb,
             has_escape,
+            in_danger,
             escape_direction,
+            danger_direction,
             crates_in_blast
     )
 
@@ -172,17 +179,13 @@ def has_escape_route(game_state):
     x, y = game_state["self"][3]
     field = game_state["field"]
     explosion = get_explosion_tiles(game_state)
-
-    # Own position -> If agent drops a bomb now, is there a safe route to escape?
-    explosion.add((x, y))
+    explosion.add((x, y)) # Own position -> If agent drops a bomb now, is there a safe route to escape?
 
     for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
         for i in range(1, 4):
             nx, ny = x + dx * i, y + dy * i
-
             if field[nx][ny] == -1:
                 break
-
             explosion.add((nx, ny))
 
     queue = deque([(x, y, 0)])
@@ -190,21 +193,17 @@ def has_escape_route(game_state):
 
     while queue:
         x, y, distance = queue.popleft()
-
         if distance >= 4:
             continue
 
         for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
             nx, ny = x + dx, y + dy
-
             if field[nx][ny] != 0 or (nx, ny) in visited:
                 continue
 
             visited.add((nx, ny))
-
             if (nx, ny) not in explosion:
                 return True
-
             queue.append((nx, ny, distance + 1))
 
     return False
@@ -260,6 +259,7 @@ def get_escape_direction(game_state):
     x, y = game_state["self"][3]
     field = game_state["field"]
     explosion = get_explosion_tiles(game_state)
+    bomb_positions = {(bx, by) for (bx, by), _ in game_state["bombs"]}
 
     queue = deque([(x, y, None, 0)])
     visited = {(x, y)}
@@ -272,7 +272,7 @@ def get_escape_direction(game_state):
             (1, 0, "RIGHT"), (-1, 0, "LEFT"), (0, 1, "DOWN"), (0, -1, "UP")
         ]:
             nx, ny = cx + dx, cy + dy
-            if field[nx][ny] != 0 or (nx, ny) in visited:
+            if field[nx][ny] != 0 or (nx, ny) in bomb_positions or (nx, ny) in visited:
                 continue
             new_direction = direction if first_direction is None else first_direction
             if (nx, ny) not in explosion:
@@ -281,3 +281,16 @@ def get_escape_direction(game_state):
             queue.append((nx, ny, new_direction, distance + 1))
 
     return "NO_ESCAPE"
+
+
+def get_danger_direction(game_state):
+    x, y = game_state["self"][3]
+    explosion = get_explosion_tiles(game_state)
+
+    for dx, dy, direction in [
+        (0, -1, "UP"), (1, 0, "RIGHT"), (0, 1, "DOWN"), (-1, 0, "LEFT")
+    ]:
+        if (x + dx, y + dy) in explosion:
+            return direction
+
+    return "NONE"

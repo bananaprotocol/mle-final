@@ -19,11 +19,9 @@ RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability ...
 MOVED_TOWARDS_COIN = "MOVED_TOWARDS_COIN"
 MOVED_AWAY_FROM_COIN = "MOVED_AWAY_FROM_COIN"
 
-SURVIVED_BOMB = "SURVIVED_BOMB"
 ESCAPED_DANGER = "ESCAPED_DANGER"
 ENTERED_DANGER = "ENTERED_DANGER"
 
-SAFE_BOMB = "SAFE_BOMB"
 WASTED_BOMB = "WASTED_BOMB"
 
 BOMB_HITS_1_CRATE = "BOMB_HITS_1_CRATE"
@@ -50,11 +48,6 @@ def setup_training(self):
     # Example: Setup an array that will note transition tuples
     # (s, a, r, s')
     self.transitions = deque(maxlen=TRANSITION_HISTORY_SIZE)
-    self.last_action = None
-    # self.update_counts = {}
-    # self.reward_history = {}
-    # self.bootstrap_history = {}   
-
 
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
     """
@@ -88,31 +81,23 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         events.append(ENTERED_DANGER)
 
     # CE1/2: Moved to or away from coin?
-    if not old_in_danger:
-        old_coin_distance = distance_to_coin(old_game_state)
-        new_coin_distance = distance_to_coin(new_game_state)
+    old_coin_distance = distance_to_coin(old_game_state)
+    new_coin_distance = distance_to_coin(new_game_state)
 
-        if new_coin_distance < old_coin_distance:
-            events.append(MOVED_TOWARDS_COIN)
-        elif new_coin_distance > old_coin_distance:
-            events.append(MOVED_AWAY_FROM_COIN)
+    if new_coin_distance < old_coin_distance:
+        events.append(MOVED_TOWARDS_COIN)
+    elif new_coin_distance > old_coin_distance:
+        events.append(MOVED_AWAY_FROM_COIN)
 
     # CE3/4: Moved towards or away from crate?
-    if not old_in_danger:  # only if not in explosion, so running away from bomb is not punished
-        old_crate_distance = distance_to_crate(old_game_state)
-        new_crate_distance = distance_to_crate(new_game_state)
+    old_crate_distance = distance_to_crate(old_game_state)
+    new_crate_distance = distance_to_crate(new_game_state)
 
-        if new_crate_distance < old_crate_distance:
-            events.append(MOVED_TOWARDS_CRATE)
-        elif new_crate_distance > old_crate_distance:
-            events.append(MOVED_AWAY_FROM_CRATE)
+    if new_crate_distance < old_crate_distance:
+        events.append(MOVED_TOWARDS_CRATE)
+    elif new_crate_distance > old_crate_distance:
+        events.append(MOVED_AWAY_FROM_CRATE)
 
-    # CE6: Bomb placement
-    if e.BOMB_EXPLODED in events and e.KILLED_SELF not in events:
-        events.append(SURVIVED_BOMB)
-
-    if e.BOMB_DROPPED in events and has_escape_route(old_game_state):
-        events.append(SAFE_BOMB)
 
     # CE7: How many crates did we hit
     if e.BOMB_DROPPED in events:
@@ -128,13 +113,14 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
             events.append(BOMB_HITS_3_PLUS_CRATES)
 
     # CE8: Moved towards escape?
-    old_x, old_y = old_game_state["self"][3]
-    old_in_danger = (old_x, old_y) in get_explosion_tiles(old_game_state)
-
     if old_in_danger:
-        old_escape_dir = get_escape_direction(old_game_state)
-        if old_escape_dir != "NO_ESCAPE" and self_action == old_escape_dir:
-            events.append("MOVED_TOWARDS_ESCAPE")
+        old_escape_distance = distance_to_escape(old_game_state)
+        new_escape_distance = distance_to_escape(new_game_state)
+
+        if new_escape_distance < old_escape_distance:
+            events.append(MOVED_TOWARDS_ESCAPE)
+        elif new_escape_distance > old_escape_distance:
+            events.append("MOVED_AWAY_FROM_ESCAPE")
 
     
     state = state_to_features(old_game_state)
@@ -170,35 +156,8 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     # Store the model
     with open("my-saved-model.pt", "wb") as file:
         pickle.dump(self.model, file)
-
-    # with open("bomb_updates.txt", "w") as file:
-    #     for (state, action), count in self.update_counts.items():
-    #         if action == "LEFT":
-    #             bootstrap_entries = self.bootstrap_history.get((state, action), [])
-    #             recent_bootstrap = bootstrap_entries[-5:]
-
-    #             file.write(
-    #                 f"STATE={state} | Q={self.model[(state, action)]:.3f} | "
-    #                 f"UPDATES={count} | "
-    #                 f"REWARDS={self.reward_history[(state, action)][-20:]}\n"
-    #                 f"LAST_BOOTSTRAPS={recent_bootstrap}\n"
-    #             )
-
-    #             for next_state, best_next_action, future_q in recent_bootstrap:
-    #                 next_key = (next_state, best_next_action)
-
-    #                 file.write(
-    #                     f"    NEXT_STATE={next_state} | "
-    #                     f"ACTION={best_next_action} | "
-    #                     f"Q={self.model.get(next_key, 0.0):.3f} | "
-    #                     f"UPDATES={self.update_counts.get(next_key, 0)} | "
-    #                     f"REWARDS={self.reward_history.get(next_key, [])[-20:]} | "
-    #                     f"FUTURE_Q={future_q:.3f}\n"
-    #                 )
-
-    #             file.write("\n")
-
-
+        
+        
 def reward_from_events(self, events: List[str]) -> int:
     """
     *This is not a required function, but an idea to structure your code.*
@@ -209,7 +168,7 @@ def reward_from_events(self, events: List[str]) -> int:
     game_rewards = {
         e.COIN_COLLECTED: 1,
         e.KILLED_OPPONENT: 5,
-        e.KILLED_SELF: -5,
+        e.KILLED_SELF: -8,
         e.INVALID_ACTION: -2, # prevents agent from moving against wall
         
         # Coin heaven
@@ -219,19 +178,17 @@ def reward_from_events(self, events: List[str]) -> int:
         # Loot Crate
         ESCAPED_DANGER: .2,
         ENTERED_DANGER: -.5,
-        # SURVIVED_BOMB: .5,
-        # SAFE_BOMB: .5,
         WASTED_BOMB: -.5,
 
-        BOMB_HITS_1_CRATE: .1,
-        BOMB_HITS_2_CRATES: .2,
-        BOMB_HITS_3_PLUS_CRATES: .3,
+        BOMB_HITS_1_CRATE: .2,
+        BOMB_HITS_2_CRATES: .3,
+        BOMB_HITS_3_PLUS_CRATES: .5,
 
         MOVED_TOWARDS_CRATE: .05,
-        MOVED_AWAY_FROM_CRATE: -.1,
-        MOVED_TOWARDS_ESCAPE: .05,
+        MOVED_AWAY_FROM_CRATE: -.2,
+        MOVED_TOWARDS_ESCAPE: .25,
 
-        e.CRATE_DESTROYED: .33,
+        e.CRATE_DESTROYED: .25,
         e.BOMB_DROPPED: 0,
     }
 
@@ -250,40 +207,29 @@ def update_q_value(self, state, action, reward, next_state):
     """
         Q-learning update function similar to lecture 4.2
     """
-    # key = (state, action)
-
-    # self.update_counts[key] = self.update_counts.get(key, 0) + 1
-    # self.reward_history.setdefault(key, []).append(reward)
-
     old_q = self.model.get((state, action), 0.0)
 
     if next_state is None:
         future_q = 0.0
-        # best_next_action = None
     else:
         future_q = max(
             self.model.get((next_state, a), 0.0)
             for a in ACTIONS
         )
-    #     best_next_action = max(ACTIONS, key=lambda a: self.model.get((next_state, a), 0.0))
-
-    # # Debug, log reward history
-    # self.bootstrap_history.setdefault(key, []).append(
-    #     (next_state, best_next_action, future_q)
-    # )
 
     new_q = old_q + ALPHA * (reward + GAMMA * future_q - old_q)
 
     self.model[(state, action)] = new_q
 
 
-def bfs_distance(game_state, targets):
+def bfs_distance(game_state, targets, blocked=None):
     if not targets:
         return 0
 
     x, y = game_state["self"][3]
     field = game_state["field"]
     targets = set(targets)
+    blocked = set() if blocked is None else set(blocked)
 
     if (x, y) in targets:
         return 0
@@ -293,24 +239,18 @@ def bfs_distance(game_state, targets):
 
     while queue:
         cx, cy, dist = queue.popleft()
-
         for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
             nx, ny = cx + dx, cy + dy
-
-            if (nx, ny) in visited:
+            if (nx, ny) in visited or (nx, ny) in blocked:
                 continue
-
-            # target found
             if (nx, ny) in targets:
                 return dist + 1
-
             if field[nx, ny] != 0:
                 continue
-
             visited.add((nx, ny))
             queue.append((nx, ny, dist + 1))
 
-    return 999  # target no reachable
+    return 999
 
 
 def distance_to_coin(game_state):
@@ -321,3 +261,17 @@ def distance_to_crate(game_state):
     field = game_state["field"]
     crate_positions = list(zip(*np.where(field == 1)))
     return bfs_distance(game_state, crate_positions)
+
+
+def distance_to_escape(game_state):
+    explosion = get_explosion_tiles(game_state)
+
+    safe_tiles = [
+        (x, y)
+        for x in range(game_state["field"].shape[0])
+        for y in range(game_state["field"].shape[1])
+        if game_state["field"][x, y] == 0
+        and (x, y) not in explosion
+    ]
+
+    return bfs_distance(game_state, safe_tiles, blocked=None)
