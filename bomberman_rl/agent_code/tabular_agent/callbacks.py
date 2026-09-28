@@ -110,13 +110,13 @@ def state_to_features(game_state: dict) -> np.array:
     else:
         escape_direction = None
 
-    # F6: Danger directions
+    # F7: Danger directions
     if not in_danger:
         danger_direction = get_danger_direction(game_state)
     else:
         danger_direction = None
     
-    # F7: How many crates are currently in range (up to 3)
+    # F8: How many crates are currently in range (up to 3)
     crates_in_blast = min(count_crates_in_blast(game_state), 3)
 
     return (

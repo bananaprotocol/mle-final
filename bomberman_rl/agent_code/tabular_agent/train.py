@@ -168,7 +168,7 @@ def reward_from_events(self, events: List[str]) -> int:
     game_rewards = {
         e.COIN_COLLECTED: 1,
         e.KILLED_OPPONENT: 5,
-        e.KILLED_SELF: -8,
+        e.GOT_KILLED: -8,
         e.INVALID_ACTION: -2, # prevents agent from moving against wall
         
         # Coin heaven
